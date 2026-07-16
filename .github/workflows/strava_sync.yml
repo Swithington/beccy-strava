@@ -1,0 +1,73 @@
+name: Strava Sync
+
+on:
+  # Run every 3 hours to catch new activities
+  schedule:
+    - cron: '0 */3 * * *'
+
+  # Allow manual trigger from GitHub UI
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Fetch mode'
+        required: true
+        default: 'incremental'
+        type: choice
+        options:
+          - incremental
+          - all
+          - days-7
+          - days-30
+
+  # Triggered by Strava webhook (via repository_dispatch)
+  repository_dispatch:
+    types: [strava_activity]
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Determine fetch mode
+        id: mode
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            INPUT="${{ github.event.inputs.mode }}"
+            if [ "$INPUT" = "all" ]; then
+              echo "args=--all" >> $GITHUB_OUTPUT
+            elif [ "$INPUT" = "days-7" ]; then
+              echo "args=--days 7" >> $GITHUB_OUTPUT
+            elif [ "$INPUT" = "days-30" ]; then
+              echo "args=--days 30" >> $GITHUB_OUTPUT
+            else
+              echo "args=" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "args=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Fetch Strava data
+        env:
+          STRAVA_CLIENT_ID:     ${{ secrets.STRAVA_CLIENT_ID }}
+          STRAVA_CLIENT_SECRET: ${{ secrets.STRAVA_CLIENT_SECRET }}
+          STRAVA_REFRESH_TOKEN: ${{ secrets.STRAVA_REFRESH_TOKEN }}
+        run: python strava_fetch.py ${{ steps.mode.outputs.args }}
+
+      - name: Commit and push updated CSVs
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add strava_activities.csv strava_splits_100m.csv strava_fetch_state.json
+          git diff --staged --quiet || git commit -m "Strava sync $(date -u '+%Y-%m-%d %H:%M UTC')"
+          git push
