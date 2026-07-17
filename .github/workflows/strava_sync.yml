@@ -51,10 +51,10 @@ jobs:
             elif [ "$INPUT" = "days-30" ]; then
               echo "args=--days 30" >> $GITHUB_OUTPUT
             else
-              echo "args=" >> $GITHUB_OUTPUT
+              echo "args=--days 2" >> $GITHUB_OUTPUT
             fi
           else
-            echo "args=" >> $GITHUB_OUTPUT
+            echo "args=--days 2" >> $GITHUB_OUTPUT
           fi
 
       - name: Fetch Strava data
